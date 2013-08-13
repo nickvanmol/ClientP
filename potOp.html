@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>De Pot Op</title>
+	<style>
+		* {
+			font-family: Verdana, sans-serif;
+		}
+		.clearfix:after {
+			content: ".";
+			display: block;
+			clear: both;
+			visibility: hidden;
+			line-height: 0;
+			height: 0;
+		}
+ 
+		.clearfix {
+			display: inline-block;
+		}
+		 
+		html[xmlns] .clearfix {
+			display: block;
+		}
+		 
+		* html .clearfix {
+			height: 1%;
+		}
+		html, body {
+			display: inline;
+			margin: 0px;
+			padding: 0px;
+			
+		}
+		body > div {
+			width:100%;
+			height: 100%;
+		} 
+		dl.toiletList {
+			border-style: solid;
+			border-width: 1px;
+			margin: 0px;
+			padding: 10%px;
+			height: 198px;
+			width:29%;
+			overflow: scroll;
+		}
+		dl.filters {
+			float:left;
+			border-style: solid;
+			border-width: 1px;
+			margin: 0px;
+			padding: 0px;
+			height: 298px;
+			width:29%;			
+		}
+		dl.filters h2 {
+			background-color: orange;
+			padding: 10px;
+			padding-left: 50px;
+		}
+		dl.toiletList a{
+			margin-bottom: 10px;
+			
+		}
+		#map_canvas {
+			float:left;
+			clear: left;	
+			border-style: solid;
+			margin: 0px;
+			padding: 0px;
+			height: 500px;
+			width: 70%;
+		}
+	</style> 
+	<script type="text/javascript" src="jQ.js"></script>
+	<script type="text/javascript"
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAA5_SNFh847uta_W4BNcFdoeD7lGeDvJ0&sensor=true">
+    </script>
+    <script type="text/javascript"
+    	src="https://maps.googleapis.com/maps/api/js?libraries=geometry&sensor=true">
+	</script>
+	<script type="text/javascript">
+		var coordinats;
+		var toiletList = new Array();
+		var infowindow = null;
+		var toiletMarkers = new Array();
+		var toiletInfo = new Array();
+		var activeMarker = null;
+   		$(document).ready(function() {
+
+   			//load json file
+   			$.getJSON('PubliekSanitair.json', function(data) {
+            	toiletList = jQuery.makeArray(data.PubliekSanitair);
+			});
+ 				
+			//load geolocation
+			if (navigator.geolocation) {
+			    navigator.geolocation.getCurrentPosition(success);
+			} else {
+	  			error('Geo Location is not supported');
+			};
+
+			//initialize page with geolacation on
+			function success(position) {
+
+				//current location latlng
+				coordinats = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+			
+	        	//set mapsettings
+	        	var mapOptions = {
+	        		center: coordinats,
+	          		zoom: 12,
+	          		mapTypeId: google.maps.MapTypeId.HYBRID
+	       		};
+	       		
+	       		//show map
+	        	var map = new google.maps.Map(document.getElementById("map_canvas"), mapOptions);
+	        	
+	        	//place current position marker
+	        	var marker = new google.maps.Marker({position: coordinats, map: map, clickable: true, title: 'You are here!'});
+
+	        	//markers toilets
+		   		for (var i = 0; i < (toiletList.length); i++) {
+		   			toiletMarkers[i] = new google.maps.Marker({position: (new google.maps.LatLng(toiletList[i].lat, toiletList[i].long)), map: map, clickable: true, icon: 'wc_icon.png'});
+		   			toiletMarkers[i].html = ('<strong>'+toiletList[i].situering+'</strong></br>'+toiletList[i].openuren+'</br>'+toiletList[i].toegang);
+
+		   		};
+
+		   		//add infoWindows for each toilet marker
+		   		infowindow = new google.maps.InfoWindow({content: "holding..."});
+		   		for (var i = 0; i < (toiletMarkers.length); i++) {
+		   			var marker = toiletMarkers[i];
+		   			
+		   			google.maps.event.addListener(marker, 'click', function() {
+		   				infowindow.setContent(this.html)
+	  					infowindow.open(map, this);
+	  					map.setCenter(this.getPosition());
+					});
+		   		};
+			
+		   		//calculate distances between toilets and current position
+				for(var i = 0; i < toiletList.length; i++){
+					toiletList[i].distance = google.maps.geometry.spherical.computeDistanceBetween(coordinats, (new google.maps.LatLng(toiletList[i].lat, toiletList[i].long)));
+					toiletMarkers[i].distance = google.maps.geometry.spherical.computeDistanceBetween(coordinats, (new google.maps.LatLng(toiletList[i].lat, toiletList[i].long)));
+				};
+
+				//sort by distonce to current location
+				function SortByDist(a, b){
+				    var aDist = a.distance;
+				    var bDist = b.distance; 
+				    return ((aDist < bDist) ? -1 : ((aDist > bDist) ? 1 : 0));
+				};
+				toiletList.sort(SortByDist);
+				toiletMarkers.sort(SortByDist);
+
+				//add list to html
+				for(var i = 0; i < toiletList.length; i++){
+					$('.toiletList').append("<a class='marker"+i+"'><dt >"+toiletList[i].situering+"</dt><dd>"+(Math.round(toiletList[i].distance)/1000)+" km</dd></a>");
+				};
+
+				//auto-load closest toilet
+				infowindow.setContent(toiletMarkers[0].html);
+				infowindow.open(map, toiletMarkers[0]);
+
+				//makes the list clickable and centers the map with matching infowindow popping up
+				for(var i = 0; i < toiletMarkers.length; i++) {
+					activeMarker = toiletMarkers[i];
+					$('.marker'+i).on('click', (function(activeMarker) {
+						return function() {
+							google.maps.event.trigger(activeMarker, 'click' );
+						}
+					})(activeMarker));				
+				}
+			};
+        });
+		
+    </script>
+</head>
+<body>
+    <div class="clearfix">
+    	<div id="map_canvas" ></div>
+       	<dl class="filters">
+    		<h2>Filters</h2>
+    		<dt>Toegang</dt>
+    		<dd><select id="Toegang" onchange="filterFree();">
+    			<option value="gratis">Gratis</option>
+    			<option value="betalend">Betalen</option>
+    			</select>
+    		</dd>
+
+    	</dl>
+        <dl class="toiletList">
+	    </dl>
+	</div>
+  </body>
+</html>
